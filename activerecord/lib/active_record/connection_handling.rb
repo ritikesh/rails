@@ -5,6 +5,8 @@ module ActiveRecord
     RAILS_ENV   = -> { (Rails.env if defined?(Rails.env)) || ENV["RAILS_ENV"].presence || ENV["RACK_ENV"].presence }
     DEFAULT_ENV = -> { RAILS_ENV.call || "default_env" }
 
+    attr_reader :shard_names
+
     # Establishes the connection to the database. Accepts a hash as input where
     # the <tt>:adapter</tt> key must be specified with the name of a database adapter (in lower-case)
     # example for regular databases (MySQL, PostgreSQL, etc):
@@ -86,15 +88,18 @@ module ActiveRecord
       end
 
       connections = []
+      @shard_names = []
 
       database.each do |role, database_key|
         db_config, owner_name = resolve_config_for_connection(database_key)
         handler = lookup_connection_handler(role.to_sym)
 
         connections << handler.establish_connection(db_config, owner_name: owner_name, role: role)
+        @shard_names << :default
       end
 
       shards.each do |shard, database_keys|
+        @shard_names << shard
         database_keys.each do |role, database_key|
           db_config, owner_name = resolve_config_for_connection(database_key)
           handler = lookup_connection_handler(role.to_sym)
