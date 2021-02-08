@@ -80,19 +80,21 @@ module ActionDispatch
 
       class CustomParamEncoder # :nodoc:
         def self.encode(request, params, controller, action)
-          return params unless controller && controller.valid_encoding? && encoding_template = action_encoding_template(request, controller, action)
+          return params unless controller && controller.valid_encoding?
+
+          klass = controller_class(request, controller)
+          return params unless klass && klass.action_encoding_templated?(action)
+
           params.except(:controller, :action).each do |key, value|
             ActionDispatch::Request::Utils.each_param_value(value) do |param|
-              if encoding_template[key.to_s]
-                param.force_encoding(encoding_template[key.to_s])
-              end
+              klass.encode_param_from_template(action, param)
             end
           end
           params
         end
 
-        def self.action_encoding_template(request, controller, action) # :nodoc:
-          request.controller_class_for(controller).action_encoding_template(action)
+        def self.controller_class(request, controller) # :nodoc:
+          request.controller_class_for(controller)
         rescue MissingController
           nil
         end

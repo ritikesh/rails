@@ -8,17 +8,27 @@ module ActionController
     module ClassMethods
       def inherited(klass) # :nodoc:
         super
-        klass.setup_param_encode
+        base_param_encodings = defined?(@_parameter_encodings) ? @_parameter_encodings.deep_dup : {}
+        klass.setup_param_encode(base_param_encodings)
       end
 
-      def setup_param_encode # :nodoc:
-        @_parameter_encodings = Hash.new { |h, k| h[k] = {} }
+      def setup_param_encode(parent_encoding_settings) # :nodoc:
+        @_parameter_encodings = parent_encoding_settings
       end
 
-      def action_encoding_template(action) # :nodoc:
-        if @_parameter_encodings.has_key?(action.to_s)
-          @_parameter_encodings[action.to_s]
+      def action_encoding_templated?(action) # :nodoc:
+        @_parameter_encodings.present? && (
+          @_parameter_encodings[:actions].nil? || @_parameter_encodings[:actions].include?(action.to_s)
+        )
+      end
+
+      def encode_param_from_template(action, param) # :nodoc:
+        encoding = if @_parameter_encodings[:actions].nil?
+          @_parameter_encodings[:encoding]
+        elsif @_parameter_encodings[:actions].key?(action.to_s)
+          @_parameter_encodings[:actions][action.to_s][param.to_s]
         end
+        param.force_encoding(encoding)
       end
 
       # Specify that a given action's parameters should all be encoded as
@@ -45,8 +55,18 @@ module ActionController
       # The show action in the above controller would have all parameter values
       # encoded as ASCII-8BIT. This is useful in the case where an application
       # must handle data but encoding of the data is unknown, like file system data.
-      def skip_parameter_encoding(action)
-        @_parameter_encodings[action.to_s] = Hash.new { Encoding::ASCII_8BIT }
+      def skip_parameter_encoding(*actions, with: Encoding::ASCII_8BIT)
+        if actions.blank?
+          @_parameter_encodings[:actions] = nil
+          @_parameter_encodings[:encoding] = with
+        else
+          new_actions = actions.each_with_object({}) do |action, hsh|
+            hsh[action.to_s] ||= Hash.new { with }
+          end
+          @_parameter_encodings.delete(:encoding)
+          @_parameter_encodings[:actions] ||= {}
+          @_parameter_encodings[:actions].deep_merge!(new_actions)
+        end
       end
 
       # Specify the encoding for a parameter on an action.
@@ -75,7 +95,9 @@ module ActionController
       # This is useful in the case where an application must handle data
       # but encoding of the data is unknown, like file system data.
       def param_encoding(action, param, encoding)
-        @_parameter_encodings[action.to_s][param.to_s] = encoding
+        skip_parameter_encoding(action, with: Encoding::UTF_8)
+
+        @_parameter_encodings[:actions][action.to_s][param.to_s] = encoding
       end
     end
   end
